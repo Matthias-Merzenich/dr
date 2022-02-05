@@ -1,0 +1,585 @@
+Documentation of dr.c, the drifter search program
+by Dean Hickerson (dean@ucdmath.ucdavis.edu) 5/8/97
+
+This is a description of what the drifter searcher (dr.c) does and how to
+use it.  Please let me know if anything is inaccurate or unclear.
+
+
+Overview
+--------
+
+dr.c keeps track of 2 Life patterns, a 'background' pattern (bkgd[][])
+which is stable, and the current pattern (curr[][]), which differs from the
+background in a 'small' region.  But only part of each pattern is known;
+most of space is filled with unknown (UNK) cells.  At any time, a cell is
+known in bkgd iff it's known in curr, but the values of known cells in the
+2 patterns may differ.  The set of cells that are different in the 2
+patterns in some generation is called the "changed" region.
+
+Initially, some part of the background is read from the standard input, and
+some of its known cells are identified as being the changed region in
+generation 0.
+
+Then the program tries to compute generation 1 of the pattern.  It first
+lists all of the neighbors of changed cells in gen 0 and then tries to
+compute gen 1 of each.  Of course it may not be able to because some
+of the neighbors of those neighbors may be unknown.  When necessary, it
+randomly sets an unknown cell's value to ON or OFF and explores the local
+consequences of such choices, the same way that lifesrc does.  Once it
+has set enough unknown cells to finish computing gen 1, it tries to
+compute gen 2, and so on.  Eventually one of 3 things will happen:
+
+(0) The changed region becomes too large, as defined by user-specified
+    parameters.  In this case the program backs up to the last choice that
+    it made.  This may require that the generation number also be decreased.
+    For example, it might have made a choice in gen 5 that permitted it
+    to compute gens 6, 7, and 8.  It might then find that the changed
+    region is too big.  In that case it will back up to gen 5, change
+    the choice that it made, and continue.
+
+(1) The program will find that the pattern has become stable or periodic,
+    in which case it prints out the initial pattern and some information
+    about the result, backs up to its last choice, and continues.
+
+(2) The program reaches its maximum generation, without the pattern becoming
+    periodic, in which case it reports this fact, backs up, and continues.
+
+
+Running dr.c
+------------
+
+The program is not interactive.  When it starts, it reads commands from the
+command line and then from the standard input, until it reads either an
+empty line or an end of file.  After that it runs until it either finishes
+its search or is interrupted.  Usually I redirect both the input and
+output and let the program run in the background; I periodically check the
+output file to see if anything interesting has been found.  (On unix
+systems, you can use commands like "grep UNKNOWN out" to check for
+interesting things while the program's running.)
+
+The 4 most essential commands are listed here; "#" indicates a decimal
+integer:
+
+    Command         Effect
+    c#              Set max number of changed cells
+    h#              Set max height of changed region
+    w#              Set max width of changed region
+    r# #            Read initial pattern
+
+The first 3 control how large a drifter is allowed to become.  E.g.
+specifying "c6", "h3", and "w5" says that in any generation there must
+be at most 6 changed cells and that they're contained in some 3x5
+rectangle.  (But see the "don't count" commands described later.)
+
+The read command is given the row and column number of the top left of
+the pattern being read.  (By default, rows and columns can range from 0
+to 80, so I usually use numbers near 40 in read commands.)  This is
+followed by some lines containing the characters 'o', '.', '0', '1', ',',
+and '?'.  The last line is terminated with '!'.  Each character specifies
+one cell in both the background and generation 0:
+
+    Char        Background      Gen 0
+    o           alive           alive
+    .           dead            dead
+    0           alive           dead
+    1           dead            alive
+    , or ?      unknown         unknown
+
+Commands can be given in any order (except the "set rule" command,
+discussed later).  There can be more than one read command, in case
+you want to specify a pattern that's spread out.  Because read commands
+take more than one line, they are not allowed in the command line.
+
+For example, suppose the input file looks like this:
+
+    r40 40
+    ooo
+    .1.
+    ooo!
+    c3
+    h3
+    w3
+
+Given these commands, the program runs, on the machine that I use, for
+about 23 seconds; some of its output is shown below:
+
+    *****  Period 3 at gen 3
+    p3 r3 2x2 .2 2A                            stillater (SC 3.1.2)
+    Gen 0.  Rows 33 - 44.  Cols 36 - 46.
+    ,
+    ,
+    ,,,oo.o.o
+    ,,,...o..
+    ,,ooo..o.
+    ,,...ooo.
+    ,,.o....o
+    ,,oooooo.
+    ,,...1.o.
+    ,,,oooo..
+    ,,,......
+    ,
+
+The first line says that the pattern becomes a p3 oscillator in gen 3.
+The second contains a 'rotor descriptor' (described later), the name
+of the resulting oscillator, and a reference (SC = stamp collection).
+(When the program starts, it reads the file "knownrotors", which
+contains rotor descriptors and names of about 500 oscillators.)  After
+that there's a picture of the background and generation 0, using the same
+format as in a read command.  As you can see, the program does not find a
+complete pattern; you'll have to finish it yourself.  For example, the
+above pattern could be completed to give:
+
+ ..oo..........
+ ..o.o.........
+ ....o..oo.....
+ ...oo.o.o.....
+ .o....o.......
+ .oooo..o......
+ .....ooo....oo
+ ...o....oo..o.
+ .ooooooo..o.o.
+ o....1.o..oo..
+ .oooooo.......
+ ..............
+ ...oo.........
+ ...oo.........
+
+Without the cell labelled "1" this is stable; with it the pattern becomes
+period 3 in generation 3, equivalent to the oscillator called "stillater",
+which is 3.1.2 in the stamp collection.
+
+If an oscillator is found which the program doesn't recognize, the name
+will be replaced by either "<- UNKNOWN" or "<- unknown: split rotor
+(gap = #)".  The former indicates that the rotor is connected; the
+latter means it's disconnected and gives an indication of how far apart
+the pieces are.  Usually disconnected rotors are combinations of known
+things, so they're not too exciting.  But occasionally one of the
+pieces will be new, or one of them can't work without the presence
+of the other (especially if gap = 1), so you shouldn't just ignore these.
+There are a lot of p3s with gap = 1 that show up; I'm gradually adding
+them to the file of known rotors, but they're still annoyingly common.
+
+Instead of the first 2 lines above, you'll sometimes see a line like:
+
+    *****  Fizzle at gen 3
+
+followed by a partial pattern.  This means that the pattern fizzles out,
+returning to the background state.  Or you'll see:
+
+    *****  Stable at gen 4
+
+which means that the pattern becomes stable, but changed from the
+background state.  Or you'll see:
+
+    *****  Max gen (100) reached
+
+indicating that the pattern reached gen 100 without becoming periodic
+or getting too big.  Usually this means that some sort of moving signal
+has been found, like the diagonal 2c/3 or 5c/9 signal or an orthogonal
+lightspeed wire.  (This is quite rare.)
+
+
+Other commands
+--------------
+
+These are the other commands that the program understands; they can be
+given either in the command line or in the standard input.  In the
+descriptions below, "#" denotes an integer.
+
+Command         Effect
+
+C<region>       Clear background and gen 0 within a region.  Regions are of
+                4 types:
+                    r# # # #        Rectangle with specified corners
+                    l# # # #        Line with specified endpoints
+                    p# #            A single point
+                    t# # # # # #    Triangle with specified vertices
+                (You can leave out the "r" for a rectangle.)  If a cell
+                within the region has already been set using a read
+                command, a clear command won't change it.  For example,
+                if you're looking for a glider eater, you can define the
+                glider in a read command and then clear a region around it.
+
+P#              Set probability (expressed as a percentage) for free choices.
+                The default is 50.
+
+s#              Set random number seed.  (I usually set this in the command
+                line rather than the input file, so that running the program
+                more than once will give different results.)
+
+skipstable      Don't print stable outcomes (except fizzles).  This decreases
+                the size of the output file substantially.
+
+skipfizzle      Don't print fizzle outcomes.
+
+showfin         Show finished patterns.  For each pattern that's printed,
+                both gen 0 and the final generation are shown.
+
+Rb###/s###      Set rule.  If you're tired of Life, use this command.  The
+                command should be given before any read or clear commands.
+                (The program doesn't check that.)
+
+(The following commands affect the symmetry of the background pattern.
+They should be given before any read or clear commands.  (I can think of
+situations where you might want to change that, but I haven't tried it.)
+Note that only the background is affected, not gen 0.  This might be
+useful for finding oscillators that reflect or rotate in period/2 gens
+or rotate in period/4 gens.)
+
+H#              Set height of space.  The default is 81, so with horizontal
+		symmetry the center line passes through row 40.  If the
+		height is changed to 80 then the center line passes between
+		rows 39 and 40.
+W#              Set width of space.  The default is 81.
+
+nosymm          No symmetry.  (This is the default, so this command isn't
+		very useful.)
+horsymm         Symmetry across horizontal line
+diagsymm        Symmetry across NW-SE diagonal
+rot90symm       90 degree rotational symmetry
+rot180symm      180 degree rotational symmetry
+plussymm        Symmetry across horizontal and vertical lines
+xsymm           Symmetry across both diagonal lines
+fullsymm        Full symmetry
+
+There's an array (called flag) of bytes, one for each cell; each bit,
+numbered 0 to 7, can be used as a boolean governing some aspect of that
+cell.  At the moment, only 2 of these are defined: flag 0 = DONTCHANGE
+and flag 1 = DONTCOUNT.  By default, all of the flags are FALSE.  Two
+commands are used to set or clear these flags:
+
+d# <region>	Set flag # for all cells in region.
+D# <region>	Clear flag # for all cells in region.  (This can be used
+		if you want to set the flag for most of a region, but
+		clear it for a subregion.)
+
+Specifically:
+
+d0<region>      Disallow changes within region.  If a cell in the region
+		becomes changed in some generation, the program will
+		back up.
+D0<region>      Allow changes within region.
+
+d1<region>      Don't count changes within region.  When checking the size
+		of the changed region (as specified by "c", "h", and "w"
+		commands), disregard any changed cells for which DONTCOUNT
+		is set.  This is useful if you're looking for eaters which
+		modify, but don't necessarily destroy, the thing being
+		eaten.  If a pattern becomes stable or periodic and all
+		changed cells are within the DONTCOUNT region, then the
+		output will say "(semifizzle)".
+
+D1<region>      Do count changes within region.
+
+v# #            Set variable.  There's an array of variables that can be
+		set by this command.  These aren't used for anything, but
+		are available in case you make modifications to the
+		program.
+
+?               Print list of commands.
+
+;<text>         Comment.  Allows you to put comments in an input file.  The
+                program stops reading when it finds an empty line, so you
+                can also put comments at the end of a file, without ';'s.
+
+
+Rotor descriptors
+-----------------
+
+A rotor descriptor is a compact, but human-readable, description of the
+rotor of an oscillator.  It shows the size and shape of the rotor, how
+many neighbors in the stator each rotor cell has, and what gen 0 looks
+like.  For example, the rotor descriptor for aVerage (LifeLine 9.3,
+SC 5.1.2) is:
+
+p5 r9 3x5 .2..B 30@@@ .2..B
+
+The first 3 'words' mean period 5, with a rotor consisting of 9 cells in
+a 3x5 rectangle.  (The orientation is always chosen so that the rectangle
+is at least as wide as it is tall.)  The rest of it is a picture of the
+rotor in one generation, with each word representing 1 row:
+
+ .2..B
+ 30@@@
+ .2..B
+
+The characters other than periods indicate rotor cells.  Digits 0 to 3
+indicate cells that are dead in gen 0; characters '@', 'A', 'B', and 'C'
+indicate live cells in gen 0.  (If you're using a rule other than Life,
+you may see digits larger than 3 and letters after 'C'.)  If you change
+'@' to '0', 'A' to '1', 'B' to '2', and 'C' to '3', you get:
+
+ .2..2
+ 30000
+ .2..2
+
+Each number tells how many live neighbors that rotor cell has in the
+stator.  With this information, it's fairly easy to determine what
+the rotor looks like in every generation, without having to construct
+the stator.  (Finding a minimal stator is still pretty tedious, even
+with the help of lifesrc.)
+
+A given oscillator will have many different rotor descriptors:  You can
+change the orientation and choose which phase is gen 0.  The program
+computes all of them and chooses the one that's lexicographically
+smallest, with  '.' < '0' < '1' < '2' < '3' < '@' < 'A' < 'B' < 'C'.
+
+The file "knownrotors" contains a list of rotor descriptors and names
+of oscillators.  Usually these are given on 1 line, with 1 or more tabs
+in between.  But if the rotor is large, then the rotor descriptor can
+have carriage returns within it or after it.  (The spaces must still be
+present.)  The name must fit on 1 line.  For example:
+
+p3 r7 3x4 .1.C A.A. 1A1.			protein (DJB #6)
+
+p4 r28 7x7 .1.0.1. A.101.A .A.@.A. 0@@.@@0 .A.@.A. A.101.A .1.0.1.
+							monogram (SC 4.0.2)
+
+p14 r24 8x9 ........3 ....A.A.1 ...10@@1. ...3.21A. .AA....3. A.1......
+ 0@@2..... B.A......						new 14.0.1
+
+The name usually contains a reference to where the oscillator can be found,
+either in the stamp collection ("SC"), or in David Buckingham's oscillator
+collection ("DJB #"), or in the collection of billiard tables found by
+dr.c ("new").
+
+
+Implementation details
+----------------------
+
+There are 3 main groups of functions in dr.c: those that keep the
+background stable, those that advance the pattern, and those that analyze
+finished patterns.  In addition, there are various functions that handle
+initialization, including reading commands; I won't describe those.
+
+Functions that keep the background stable
+-----------------------------------------
+
+At this level, the program acts like a simplified version of lifesrc,
+trying to make sure that what's contained in bkgd is part of an infinite
+stable pattern.  It maintains a list of settings, defined as follows:
+
+    typedef struct
+      { int row;
+        int col;
+      }  point;
+
+    typedef struct
+      { int row;
+        int col;
+        unsigned char val;
+        boolean free;
+        int gen;
+        point *nay;
+        point *chg;
+      }  setting;
+
+    setting settinglist[MAXHT*MAXWD];	/* List of background cell settings */
+
+    setting *nxstng,	/* Pointer to setting whose consequences are
+			   being examined */
+	    *nwstng;	/* Pointer to setting that's being added to list */
+
+These are used pretty much as in lifesrc.  The additional fields gen, nay,
+and chg will be discussed later.  The following functions are used to build
+the background; they're similar to their counterparts in lifesrc, so I won't
+describe them further here, except to say that whenever an element of bkgd
+is changed to or from UNK, the same change is made in curr:
+
+    void setbkgd(int r, int c, unsigned char v, boolean f)
+    char consistify(int r, int c)
+    char consis9(int r, int c)
+    char proceed(int r, int c, unsigned char v, boolean f)
+    char backup(void)
+    char go(int r, int c, unsigned char v, boolean f, setting **wasfree)
+
+Functions that advance the pattern
+----------------------------------
+
+These functions, and the main program, are involved in advancing the
+pattern:
+
+    void listneighbors(int gen)
+    void changecurr(unsigned char curr[][MAXWD], int gen)
+    char nxgen(int r, int c)
+    char trycell(void)
+    char computecellorbackup(void)
+
+Three arrays and two pointers are used to keep track of the changed cells
+in all generations that have been computed:
+
+    point chglist[CHGLISTLTH];
+
+    point *(chgd[MAXGEN+1]),
+          *(nays[MAXGEN+1]);
+
+    point *nay,         /* Ptr into list of neighbors of previous gen */
+          *chg;         /* Ptr to end of list of changes in current gen */
+
+chgd and nays contain pointers into chglist:  The changed cells in generation
+g are stored from chgd[g] to nays[g]-1; the neighbors of those cells are
+stored from nays[g] to chgd[g+1]-1.  Thus, we have
+
+    chglist = chgd[0] < nays[0] < chgd[1] < nays[1] < ...
+        		< nays[gen-1] <= nay < chgd[gen] <= chg
+
+The main loop of the program consists of calls to computecellorbackup().
+This function looks at the cell (r,c) pointed to by nay and tries to
+compute its value in generation gen.  If the value depends on an unknown
+background cell, then it calls go(r,c,value,TRUE,wasfree) to set the
+value, and tries again.  If it finds that the background is inconsistent
+or that the changed region in generation gen is too large, it backs up,
+changing gen, nay, and chg to the values they had the last time we made a
+free choice of a background cell.  (This is where we use the 3 extra
+fields in a setting.)  Otherwise, it increments nay.  Also, if the new value
+at (r,c) is different from the background there, it adds (r,c) to the list
+at chg and increments chg.
+
+After each call to computecellorbackup, the main program checks to see if
+nay = chgd[gen].  If so,  then we know that we've finished computing
+generation gen, so we set chgd[gen+1] equal to chg.  We then check to see
+if the pattern has become periodic or we've reached the maximum allowed
+generation.  If so, we analyze the pattern and, if appropriate, print out
+some information about it.  If not, then we call listneighbors to add the
+list of neighbors of the changed cells in generation gen to chglist, and
+make nays[gen] point past it.  We then increment gen, set nay and chg,
+and continue the main loop.
+
+Functions that analyze finished patterns
+----------------------------------------
+
+Whenever the program finishes computing a generation, it checks to see
+if the pattern has become periodic; if so it does a lot of analysis to see
+if a new oscillator has been found.  (When I started writing the program, I
+had no idea that this would be necessary.)  This analysis is done in the
+most straightforward way I could think of; it happens so rarely that it
+doesn't need to be efficient.  The following functions are used:
+
+    int period(void)
+    unsigned long int newhash(unsigned long int hash, unsigned long int update)
+    unsigned long int hash(void)
+    char hashnew(unsigned long int h)
+    void display(int g)
+    void getrotordesc(unsigned char cell[][MAXWD], int period,
+      int minr, int maxr, int minc, int maxc, int orientation, char *string)
+    void printoscinfo(int p)
+    boolean semifizzle(void)
+
+period() checks to see if the pattern is periodic, by seeing if the changes
+in the current generation are the same as in some previous generation.
+
+The next three functions are used to see if the pattern is really different
+from others found earlier in the same run.  Often slightly different
+backgrounds will lead to exactly the same changed region in every generation.
+So to avoid duplication, a hash table is kept, containing a list of what's
+been found already.  If something is found that has the same hash function
+as something already in the table, then it's ignored.  (There's no guarantee
+that the version that's printed is the nicest in any sense.)  Note:  This
+part of the program needs work.  There's still some duplication, and there's
+a small chance that something interesting will be ignored, if it happens to
+have the same hash function as something else.
+
+display(g) displays the pattern, showing both the background and generation
+g.  Usually this is called with g=0, but if the showfin command was given,
+then the final generation is also shown.
+
+getrotordesc(...) computes a rotor descriptor for an oscillator.  It's
+called repeatedly by printoscinfo(p) with all possible choices for the
+phase and orientation.  printoscinfo prints the lexicographically minimal
+descriptor.
+
+semifizzle() checks to see if all changes in the final generation are
+within the region specified by "don't count" commands.
+
+
+Known bugs
+----------
+
+If you don't specify any changes in gen 0, the program crashes, with a
+Segmentation Fault.  I haven't gotten around to tracking this down.
+
+The function readknownrotors() should make sure that the file size does
+not exceed MAXFILESIZE.
+
+As mentioned earlier, the hash routines need some work.
+
+
+Sample input files
+------------------
+
+Here are a few sample input files to help you get started.  These are
+all rather small searches; try increasing the values in the "c", "h",
+and "w" commands to see how the running time and the number of things
+found is affected.  (When it finishes, and periodically while it's
+running, dr.c prints the number of times that it's gone through the
+main loop.  This gives a hardware-independent measure of the size of
+a search.)  And you'll probably want to add a "skipstable" command to
+cut down on the amount of uninteresting output.
+
+----------------------------------------------------------------------
+
+; in.time
+; This is used to measure the speed of dr.c, to see if improvements are
+; actually helpful.  Currently it takes about 18 seconds on the machine
+; that I use.  The first read defines a piece of the 2c/3 signal; the
+; second ensures that it won't get very far.  The program finds 10 different
+; oscillators with periods 3 to 7, each one several times, plus a bunch of
+; fizzlers and restabilizers.
+c3
+h3
+w3
+r24 24
+.ooooo
+o.....
+o.10oo
+o.o....
+o.o..oo
+o.o.o..!
+r36 37
+o.!
+
+----------------------------------------------------------------------
+
+; in.g
+; Looks for things that result from a glider hitting a still life.  The
+; "d0" command keeps the glider from moving forever (but also may throw out
+; some reactions that we'd like to see).  The clear command ensures that
+; space is empty around the glider.  The "d1" command says that we don't
+; care if stuff gets left behind in the initially cleared region.  This
+; runs in about a minute on my system and finds various now-familiar
+; eaters, the boat-bit reaction, a reaction that adds 2 cells to a
+; still-life, the g+boat -> blinker collision, and several g+still -> p3
+; collisions.
+c5
+h4
+w4
+showfin
+r40 40
+.1
+..1
+111!
+C30 30 44 50
+d0 p46 46
+d1 30 30 44 50
+
+----------------------------------------------------------------------
+
+; in.sym
+; Looks for symmetrical billiard tables with symmetry across a horizontal
+; axis between cells:  The "H80" command causes the height of space to
+; be even.  The symmetry axis is between rows 39 and 40, so the read
+; command puts symmetric stuff on those 2 rows.
+c12
+h8
+w8
+H80
+horsymm
+skipstable
+skipfizzle
+r39 40
+0
+0!
+
+----------------------------------------------------------------------
+
+END OF FILE
