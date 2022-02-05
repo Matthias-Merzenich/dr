@@ -18,8 +18,8 @@ int WD = MAXWD;
 #define CHGLISTLTH  100000  /* Max total number of changed cells and    */
                             /* their neighbors in all gens            */
 #define HASHTBLSIZE 2000000 /* Max number of distinct life histories */
-#define MAXKNOWN    5000    /* Max number of known rotors */
-#define MAXFILESIZE 1000000 /* Max length of known rotor descriptors & names */
+#define MAXKNOWN    7500    /* Max number of known rotors */
+#define MAXFILESIZE 1500000 /* Max length of known rotor descriptors & names */
 #define NUMVARS     200     /* # of vars available for program modification */
 #define MAXROTORDESCLTH	1000	/* Max length of rotor descriptors */
 
@@ -80,7 +80,7 @@ boolean SKIPFIZZLE = FALSE; /* If true, don't display fizzle outcomes */
 boolean SHOWFIN = FALSE;    /* If true, display finished patterns */
 boolean SHOWALL = FALSE;    /* If true, display all gens */
 
-char knownrotorsfilename[100] = "/Users/doris/Drift/knownrotors";
+char knownrotorsfilename[100] = "knownrotors";
 
 /************************************************************************/
 /* These are the arrays that contain information about the rule.        */
